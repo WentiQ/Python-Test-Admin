@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Results Viewer - Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.8;
+            font-size: 1rem;
+        }
+        
+        .controls {
+            padding: 20px 30px;
+            background: #f8f9fc;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .search-filters {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            flex: 1;
+        }
+        
+        input[type="text"], select {
+            padding: 10px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+            min-width: 200px;
+        }
+        
+        input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+        
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(17, 153, 142, 0.4);
+        }
+        
+        .stats-bar {
+            padding: 20px 30px;
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #718096;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            color: #2d3748;
+            font-weight: 700;
+        }
+        
+        .table-container {
+            padding: 30px;
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        
+        th {
+            background: #f8f9fc;
+            color: #2d3748;
+            font-weight: 600;
+            text-align: left;
+            padding: 12px;
+            border-bottom: 2px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+            white-space: nowrap;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        tr:hover {
+            background: #f8f9fc;
+        }
+        
+        .score-good {
+            color: #10b981;
+            font-weight: 600;
+        }
+        
+        .score-medium {
+            color: #f59e0b;
+            font-weight: 600;
+        }
+        
+        .score-poor {
+            color: #ef4444;
+            font-weight: 600;
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-block;
+        }
+        
+        .status-submitted {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .status-auto {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .status-left {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 60px;
+            font-size: 18px;
+            color: #718096;
+        }
+        
+        .loading-spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px;
+        }
+        
+        .empty-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        
+        .empty-text {
+            font-size: 18px;
+            color: #718096;
+        }
+        
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 15px;
+            margin: 20px 30px;
+            border-radius: 8px;
+            border-left: 4px solid #ef4444;
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .search-filters {
+                flex-direction: column;
+            }
+            
+            input[type="text"], select {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Test Results Viewer</h1>
+            <p>View and export student test attempt data</p>
+        </div>
+        
+        <div class="controls">
+            <div class="search-filters">
+                <input type="text" id="search-input" placeholder="🔍 Search by name or email...">
+                <select id="test-filter">
+                    <option value="">All Tests</option>
+                </select>
+                <button class="btn btn-primary" onclick="loadAttempts()">🔄 Refresh Data</button>
+            </div>
+            <button class="btn btn-success" onclick="exportToCSV()">📥 Export to CSV</button>
+        </div>
+        
+        <div class="stats-bar">
+            <div class="stat-item">
+                <span class="stat-label">Total Attempts</span>
+                <span class="stat-value" id="total-attempts">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Average Score</span>
+                <span class="stat-value" id="avg-score">0%</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Unique Students</span>
+                <span class="stat-value" id="unique-students">0</span>
+            </div>
+        </div>
+        
+        <div id="content-area">
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>Loading test attempts...</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Firebase Configuration -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, getDocs, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        
+        // Firebase configuration - REPLACE WITH YOUR CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyCYedV02sHT3oW2Tze9tRaNK9mVLKRVfkE",
+            authDomain: "enduro-python-test.firebaseapp.com",
+            projectId: "enduro-python-test",
+            storageBucket: "enduro-python-test.firebasestorage.app",
+            messagingSenderId: "1052301312734",
+            appId: "1:1052301312734:web:85c83cc3280ceda1c1f2b4"
+        };
+        
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        
+        let allAttempts = [];
+        let allTests = [];
+        
+        // Load test attempts from Firebase
+        async function loadAttemptsFromFirebase() {
+            try {
+                console.log('Loading attempts from Firebase...');
+                
+                // Load attempts
+                const attemptsSnapshot = await getDocs(query(collection(db, 'testAttempts'), orderBy('submitTime', 'desc')));
+                allAttempts = attemptsSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                
+                console.log('Loaded attempts:', allAttempts.length);
+                
+                // Load tests for filter
+                const testsSnapshot = await getDocs(collection(db, 'tests'));
+                allTests = testsSnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                
+                // If no data in Firebase, try localStorage as fallback
+                if (allAttempts.length === 0) {
+                    console.log('No attempts in Firebase, checking localStorage...');
+                    allAttempts = JSON.parse(localStorage.getItem('testAttempts') || '[]');
+                    console.log('Loaded from localStorage:', allAttempts.length);
+                }
+                
+                if (allTests.length === 0) {
+                    console.log('No tests in Firebase, checking localStorage...');
+                    allTests = JSON.parse(localStorage.getItem('tests') || '[]');
+                }
+                
+                return { success: true, attempts: allAttempts, tests: allTests };
+            } catch (error) {
+                console.error('Error loading from Firebase:', error);
+                
+                // Fallback to localStorage
+                console.log('Falling back to localStorage...');
+                allAttempts = JSON.parse(localStorage.getItem('testAttempts') || '[]');
+                allTests = JSON.parse(localStorage.getItem('tests') || '[]');
+                
+                return { success: false, error: error.message, attempts: allAttempts, tests: allTests };
+            }
+        }
+        
+        // Display attempts in table
+        function displayAttempts(attempts) {
+            const contentArea = document.getElementById('content-area');
+            
+            if (attempts.length === 0) {
+                contentArea.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📝</div>
+                        <div class="empty-text">No test attempts found</div>
+                    </div>
+                `;
+                updateStats(attempts);
+                return;
+            }
+            
+            // Determine max questions
+            const maxQuestions = Math.max(...attempts.map(a => a.questionScores?.length || 0), 12);
+            
+            // Generate question column headers
+            const questionHeaders = Array.from({length: maxQuestions}, (_, i) => 
+                `<th>Q${i+1}</th>`
+            ).join('');
+            
+            contentArea.innerHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Student Name</th>
+                                <th>Email</th>
+                                <th>Department</th>
+                                <th>Group</th>
+                                <th>WhatsApp</th>
+                                <th>Test</th>
+                                <th>Submit Time</th>
+                                <th>Duration (min)</th>
+                                ${questionHeaders}
+                                <th>Total Score</th>
+                                <th>Percentage</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${attempts.map(attempt => {
+                                const scoreClass = attempt.percentage >= 70 ? 'score-good' : 
+                                                  attempt.percentage >= 40 ? 'score-medium' : 'score-poor';
+                                const statusClass = attempt.leftInMiddle ? 'status-left' : 
+                                                   (attempt.autoSubmitted ? 'status-auto' : 'status-submitted');
+                                
+                                // Sort questions by original index
+                                const sortedQuestionScores = attempt.questionScores 
+                                    ? [...attempt.questionScores].sort((a, b) => {
+                                        const aIdx = a.originalIndex !== undefined ? a.originalIndex : a.questionNumber - 1;
+                                        const bIdx = b.originalIndex !== undefined ? b.originalIndex : b.questionNumber - 1;
+                                        return aIdx - bIdx;
+                                    })
+                                    : [];
+                                
+                                // Generate question cells
+                                const questionCells = Array.from({length: maxQuestions}, (_, i) => {
+                                    const qs = sortedQuestionScores[i];
+                                    if (qs) {
+                                        const qScoreClass = qs.score === qs.maxScore ? 'score-good' : 
+                                                           qs.score >= qs.maxScore * 0.5 ? 'score-medium' : 'score-poor';
+                                        const testCaseInfo = (qs.totalTestCases !== undefined && qs.totalTestCases > 0) 
+                                            ? `<br><small style="font-size:0.7em">(${qs.passedTestCases || 0}/${qs.totalTestCases} TC)</small>` 
+                                            : '';
+                                        return `<td class="${qScoreClass}" style="text-align: center;">${qs.score}/${qs.maxScore}${testCaseInfo}</td>`;
+                                    }
+                                    return `<td style="text-align: center;">-</td>`;
+                                }).join('');
+                                
+                                return `
+                                    <tr>
+                                        <td>${attempt.userName || 'N/A'}</td>
+                                        <td>${attempt.userEmail || 'N/A'}</td>
+                                        <td>${attempt.department || 'N/A'}</td>
+                                        <td>${attempt.group || 'N/A'}</td>
+                                        <td>${attempt.whatsapp || 'N/A'}</td>
+                                        <td>${attempt.testTitle || 'N/A'}</td>
+                                        <td>${attempt.submitTime ? new Date(attempt.submitTime).toLocaleString() : 'N/A'}</td>
+                                        <td>${attempt.elapsedMinutes || 0}</td>
+                                        ${questionCells}
+                                        <td class="${scoreClass}"><strong>${attempt.totalScore || 0}/${attempt.maxScore || 0}</strong></td>
+                                        <td class="${scoreClass}"><strong>${attempt.percentage || 0}%</strong></td>
+                                        <td>
+                                            <span class="status-badge ${statusClass}">
+                                                ${attempt.leftInMiddle ? '⚠️ Left' : (attempt.autoSubmitted ? 'Auto' : 'Submitted')}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            updateStats(attempts);
+        }
+        
+        // Update statistics
+        function updateStats(attempts) {
+            document.getElementById('total-attempts').textContent = attempts.length;
+            
+            if (attempts.length > 0) {
+                const avgScore = Math.round(
+                    attempts.reduce((sum, a) => sum + (a.percentage || 0), 0) / attempts.length
+                );
+                document.getElementById('avg-score').textContent = avgScore + '%';
+                
+                const uniqueStudents = new Set(attempts.map(a => a.userEmail)).size;
+                document.getElementById('unique-students').textContent = uniqueStudents;
+            } else {
+                document.getElementById('avg-score').textContent = '0%';
+                document.getElementById('unique-students').textContent = '0';
+            }
+        }
+        
+        // Filter attempts
+        function filterAttempts() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const testFilter = document.getElementById('test-filter').value;
+            
+            let filtered = allAttempts;
+            
+            if (searchTerm) {
+                filtered = filtered.filter(a => 
+                    (a.userName || '').toLowerCase().includes(searchTerm) ||
+                    (a.userEmail || '').toLowerCase().includes(searchTerm)
+                );
+            }
+            
+            if (testFilter) {
+                filtered = filtered.filter(a => a.testId === testFilter);
+            }
+            
+            displayAttempts(filtered);
+        }
+        
+        // Export to CSV
+        window.exportToCSV = function() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const testFilter = document.getElementById('test-filter').value;
+            
+            let filtered = allAttempts;
+            
+            if (searchTerm) {
+                filtered = filtered.filter(a => 
+                    (a.userName || '').toLowerCase().includes(searchTerm) ||
+                    (a.userEmail || '').toLowerCase().includes(searchTerm)
+                );
+            }
+            
+            if (testFilter) {
+                filtered = filtered.filter(a => a.testId === testFilter);
+            }
+            
+            if (filtered.length === 0) {
+                alert('No data to export');
+                return;
+            }
+            
+            // Determine max questions
+            const maxQuestions = Math.max(...filtered.map(a => a.questionScores?.length || 0), 12);
+            
+            // Create CSV headers
+            const questionHeaders = Array.from({length: maxQuestions}, (_, i) => `Q${i+1} Score`);
+            const headers = [
+                'Student Name', 'Email', 'Department', 'Group', 'WhatsApp', 
+                'Test', 'Submit Time', 'Duration (min)',
+                ...questionHeaders,
+                'Total Score', 'Max Score', 'Percentage', 'Status'
+            ];
+            
+            const rows = filtered.map(a => {
+                const sortedQuestionScores = a.questionScores 
+                    ? [...a.questionScores].sort((a, b) => {
+                        const aIdx = a.originalIndex !== undefined ? a.originalIndex : a.questionNumber - 1;
+                        const bIdx = b.originalIndex !== undefined ? b.originalIndex : b.questionNumber - 1;
+                        return aIdx - bIdx;
+                    })
+                    : [];
+                
+                const questionScores = Array.from({length: maxQuestions}, (_, i) => {
+                    const qs = sortedQuestionScores[i];
+                    if (qs) {
+                        return `${qs.score}/${qs.maxScore}`;
+                    }
+                    return '-';
+                });
+                
+                return [
+                    a.userName || 'N/A',
+                    a.userEmail || 'N/A',
+                    a.department || 'N/A',
+                    a.group || 'N/A',
+                    a.whatsapp || 'N/A',
+                    a.testTitle || 'N/A',
+                    a.submitTime ? new Date(a.submitTime).toLocaleString() : 'N/A',
+                    a.elapsedMinutes || 0,
+                    ...questionScores,
+                    a.totalScore || 0,
+                    a.maxScore || 0,
+                    a.percentage || 0,
+                    a.leftInMiddle ? 'Left in Middle' : (a.autoSubmitted ? 'Auto-Submitted' : 'Submitted')
+                ];
+            });
+            
+            const csvContent = [headers, ...rows]
+                .map(row => row.map(cell => `"${cell}"`).join(','))
+                .join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute('href', url);
+            link.setAttribute('download', `test-attempts-${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+        
+        // Load attempts
+        window.loadAttempts = async function() {
+            const contentArea = document.getElementById('content-area');
+            contentArea.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Loading test attempts...</p>
+                </div>
+            `;
+            
+            const result = await loadAttemptsFromFirebase();
+            
+            if (!result.success && result.attempts.length === 0) {
+                contentArea.innerHTML = `
+                    <div class="error">
+                        <strong>Error loading data:</strong> ${result.error}
+                        <br>Could not load data from Firebase or localStorage.
+                    </div>
+                `;
+                return;
+            }
+            
+            // Populate test filter
+            const testFilter = document.getElementById('test-filter');
+            testFilter.innerHTML = '<option value="">All Tests</option>' + 
+                allTests.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+            
+            displayAttempts(allAttempts);
+        };
+        
+        // Setup event listeners
+        document.getElementById('search-input').addEventListener('input', filterAttempts);
+        document.getElementById('test-filter').addEventListener('change', filterAttempts);
+        
+        // Load data on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadAttempts();
+        });
+    </script>
+</body>
+</html>
