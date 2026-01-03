@@ -367,25 +367,43 @@
         // Load test attempts from Firebase
         async function loadAttemptsFromFirebase() {
             try {
+                console.log('=== STARTING FIREBASE LOAD ===');
                 console.log('Loading attempts from Firebase with cache bust...');
                 console.log('Timestamp:', new Date().toISOString());
+                console.log('Firebase config check:', {
+                    projectId: firebaseConfig.projectId,
+                    authDomain: firebaseConfig.authDomain
+                });
                 
                 // Clear any cached data
                 allAttempts = [];
                 allTests = [];
                 
                 // Load attempts with fresh query
-                const attemptsSnapshot = await getDocs(query(collection(db, 'testAttempts'), orderBy('submitTime', 'desc')));
-                const firebaseAttempts = attemptsSnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
+                console.log('Fetching from testAttempts collection...');
+                const attemptsRef = collection(db, 'testAttempts');
+                const attemptsQuery = query(attemptsRef, orderBy('submitTime', 'desc'));
+                const attemptsSnapshot = await getDocs(attemptsQuery);
                 
-                console.log('Loaded from Firebase:', firebaseAttempts.length, 'attempts');
+                console.log('Raw snapshot received:', attemptsSnapshot.size, 'documents');
+                
+                const firebaseAttempts = attemptsSnapshot.docs.map(doc => {
+                    const data = doc.data();
+                    console.log('Document ID:', doc.id, 'Data keys:', Object.keys(data));
+                    return {
+                        id: doc.id,
+                        ...data
+                    };
+                });
+                
+                console.log('✓ Loaded from Firebase:', firebaseAttempts.length, 'attempts');
+                if (firebaseAttempts.length > 0) {
+                    console.log('Sample Firebase attempt:', firebaseAttempts[0]);
+                }
                 
                 // Load localStorage attempts
                 const localAttempts = JSON.parse(localStorage.getItem('testAttempts') || '[]');
-                console.log('Loaded from localStorage:', localAttempts.length, 'attempts');
+                console.log('✓ Loaded from localStorage:', localAttempts.length, 'attempts');
                 
                 // Merge both sources, removing duplicates by ID or unique key
                 const attemptMap = new Map();
@@ -423,16 +441,36 @@
                     allTests = JSON.parse(localStorage.getItem('tests') || '[]');
                 }
                 
+                console.log('=== FIREBASE LOAD SUCCESS ===');
                 return { success: true, attempts: allAttempts, tests: allTests };
             } catch (error) {
-                console.error('Error loading from Firebase:', error);
+                console.error('=== FIREBASE ERROR ===');
+                console.error('Error type:', error.name);
+                console.error('Error message:', error.message);
+                console.error('Error code:', error.code);
+                console.error('Full error:', error);
+                console.error('Stack trace:', error.stack);
                 
                 // Fallback to localStorage
                 console.log('Falling back to localStorage...');
-                allAttempts = JSON.parse(localStorage.getItem('testAttempts') || '[]');
-                allTests = JSON.parse(localStorage.getItem('tests') || '[]');
+                try {
+                    allAttempts = JSON.parse(localStorage.getItem('testAttempts') || '[]');
+                    allTests = JSON.parse(localStorage.getItem('tests') || '[]');
+                    console.log('✓ Fallback successful:', allAttempts.length, 'attempts from localStorage');
+                } catch (localError) {
+                    console.error('localStorage also failed:', localError);
+                    allAttempts = [];
+                    allTests = [];
+                }
                 
-                return { success: false, error: error.message, attempts: allAttempts, tests: allTests };
+                return { 
+                    success: false, 
+                    error: error.message, 
+                    errorCode: error.code,
+                    errorDetails: error.toString(),
+                    attempts: allAttempts, 
+                    tests: allTests 
+                };
             }
         }
         
@@ -664,6 +702,7 @@
         
         // Load attempts
         window.loadAttempts = async function() {
+            console.log('=== LOAD ATTEMPTS CALLED ===');
             const contentArea = document.getElementById('content-area');
             contentArea.innerHTML = `
                 <div class="loading">
@@ -674,6 +713,12 @@
             `;
             
             const result = await loadAttemptsFromFirebase();
+            console.log('Load result:', {
+                success: result.success,
+                attemptsCount: result.attempts.length,
+                testsCount: result.tests.length,
+                error: result.error
+            });
             
             // Update last refresh time
             const now = new Date();
@@ -683,21 +728,41 @@
             if (!result.success && result.attempts.length === 0) {
                 contentArea.innerHTML = `
                     <div class="error">
-                        <strong>Error loading data:</strong> ${result.error}
-                        <br>Could not load data from Firebase or localStorage.
+                        <strong>❌ Error loading data from Firebase:</strong>
+                        <br><br>
+                        <strong>Error Message:</strong> ${result.error || 'Unknown error'}
+                        <br>
+                        ${result.errorCode ? `<strong>Error Code:</strong> ${result.errorCode}<br>` : ''}
+                        ${result.errorDetails ? `<strong>Details:</strong> ${result.errorDetails}<br><br>` : '<br>'}
+                        <strong>Possible causes:</strong>
+                        <ul style="margin-top: 10px; margin-left: 20px;">
+                            <li>Firebase configuration is incorrect</li>
+                            <li>Firestore database doesn't exist or is not set up</li>
+                            <li>Firebase Security Rules are blocking access</li>
+                            <li>Network connectivity issues</li>
+                            <li>No data has been submitted yet</li>
+                        </ul>
+                        <br>
+                        <strong>Check browser console (F12) for detailed logs.</strong>
                     </div>
                 `;
                 return;
             }
             
             // Show notification about data source
-            let dataSource = '';
             if (result.success && allAttempts.length > 0) {
-                dataSource = '✓ Data loaded successfully from Firebase and localStorage';
-                showNotification(dataSource, 'success');
-            } else if (allAttempts.length > 0) {
-                dataSource = '⚠️ Using localStorage data (Firebase connection issue)';
-                showNotification(dataSource, 'warning');
+                const firebaseCount = allAttempts.length;
+                showNotification(`✓ Successfully loaded ${firebaseCount} test attempt${firebaseCount !== 1 ? 's' : ''}`, 'success');
+                console.log('✓ Data display successful');
+            } else if (!result.success && allAttempts.length > 0) {
+                showNotification(`⚠️ Firebase error: Using ${allAttempts.length} attempt${allAttempts.length !== 1 ? 's' : ''} from localStorage`, 'warning');
+                console.warn('Using localStorage fallback data');
+            } else if (result.success && allAttempts.length === 0) {
+                showNotification('ℹ️ Connected to Firebase but no test attempts found', 'info');
+                console.log('Connected but no data available');
+            } else {
+                showNotification('❌ Failed to load data - check console for details', 'error');
+                console.error('Complete failure to load data');
             }
             
             // Populate test filter
@@ -706,6 +771,7 @@
                 allTests.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
             
             displayAttempts(allAttempts);
+            console.log('=== LOAD ATTEMPTS COMPLETE ===');
         };
         
         // Show notification
