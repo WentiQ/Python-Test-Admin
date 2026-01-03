@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Test Results Viewer - Admin</title>
     <style>
         * {
@@ -17,7 +20,7 @@
             min-height: 100vh;
             padding: 20px;
         }
-        
+    
         .container {
             max-width: 1600px;
             margin: 0 auto;
@@ -230,6 +233,28 @@
             100% { transform: rotate(360deg); }
         }
         
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+        
         .empty-state {
             text-align: center;
             padding: 60px;
@@ -284,11 +309,16 @@
                     <option value="">All Tests</option>
                 </select>
                 <button class="btn btn-primary" onclick="loadAttempts()">🔄 Refresh Data</button>
+                <button class="btn btn-primary" onclick="hardRefresh()" title="Force reload page and clear cache">⚡ Hard Refresh</button>
             </div>
             <button class="btn btn-success" onclick="exportToCSV()">📥 Export to CSV</button>
         </div>
         
         <div class="stats-bar">
+            <div class="stat-item">
+                <span class="stat-label">Last Refreshed</span>
+                <span class="stat-value" id="last-refresh" style="font-size: 14px;">Never</span>
+            </div>
             <div class="stat-item">
                 <span class="stat-label">Total Attempts</span>
                 <span class="stat-value" id="total-attempts">0</span>
@@ -313,17 +343,18 @@
     
     <!-- Firebase Configuration -->
     <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getFirestore, collection, getDocs, query, orderBy } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js';
+        import { getFirestore, collection, getDocs, query, orderBy } from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js';
         
-        // Firebase configuration - REPLACE WITH YOUR CONFIG
+        // Firebase configuration - Same as main application
         const firebaseConfig = {
-            apiKey: "AIzaSyCYedV02sHT3oW2Tze9tRaNK9mVLKRVfkE",
-            authDomain: "enduro-python-test.firebaseapp.com",
-            projectId: "enduro-python-test",
-            storageBucket: "enduro-python-test.firebasestorage.app",
-            messagingSenderId: "1052301312734",
-            appId: "1:1052301312734:web:85c83cc3280ceda1c1f2b4"
+            apiKey: "AIzaSyDv_XYCIJe5VSTPflAJ6CPv_wEJLuhVz_w",
+            authDomain: "python-test-platform.firebaseapp.com",
+            projectId: "python-test-platform",
+            storageBucket: "python-test-platform.firebasestorage.app",
+            messagingSenderId: "387522755630",
+            appId: "1:387522755630:web:3e1c585091d658d6e4f3bf",
+            measurementId: "G-XCP5F4SX01"
         };
         
         // Initialize Firebase
@@ -336,16 +367,49 @@
         // Load test attempts from Firebase
         async function loadAttemptsFromFirebase() {
             try {
-                console.log('Loading attempts from Firebase...');
+                console.log('Loading attempts from Firebase with cache bust...');
+                console.log('Timestamp:', new Date().toISOString());
                 
-                // Load attempts
+                // Clear any cached data
+                allAttempts = [];
+                allTests = [];
+                
+                // Load attempts with fresh query
                 const attemptsSnapshot = await getDocs(query(collection(db, 'testAttempts'), orderBy('submitTime', 'desc')));
-                allAttempts = attemptsSnapshot.docs.map(doc => ({
+                const firebaseAttempts = attemptsSnapshot.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()
                 }));
                 
-                console.log('Loaded attempts:', allAttempts.length);
+                console.log('Loaded from Firebase:', firebaseAttempts.length, 'attempts');
+                
+                // Load localStorage attempts
+                const localAttempts = JSON.parse(localStorage.getItem('testAttempts') || '[]');
+                console.log('Loaded from localStorage:', localAttempts.length, 'attempts');
+                
+                // Merge both sources, removing duplicates by ID or unique key
+                const attemptMap = new Map();
+                
+                // Add Firebase attempts first (priority)
+                firebaseAttempts.forEach(attempt => {
+                    const key = attempt.id || `${attempt.userEmail}-${attempt.testId}-${attempt.submitTime}`;
+                    attemptMap.set(key, attempt);
+                });
+                
+                // Add localStorage attempts that aren't already in Firebase
+                localAttempts.forEach(attempt => {
+                    const key = attempt.firebaseId || attempt.id || `${attempt.userEmail}-${attempt.testId}-${attempt.submitTime}`;
+                    if (!attemptMap.has(key)) {
+                        attemptMap.set(key, attempt);
+                    }
+                });
+                
+                allAttempts = Array.from(attemptMap.values());
+                // Sort by submit time descending
+                allAttempts.sort((a, b) => (b.submitTime || 0) - (a.submitTime || 0));
+                
+                console.log('Total merged attempts:', allAttempts.length);
+                console.log('Latest attempt time:', allAttempts[0]?.submitTime ? new Date(allAttempts[0].submitTime).toLocaleString() : 'N/A');
                 
                 // Load tests for filter
                 const testsSnapshot = await getDocs(collection(db, 'tests'));
@@ -353,13 +417,6 @@
                     id: doc.id,
                     ...doc.data()
                 }));
-                
-                // If no data in Firebase, try localStorage as fallback
-                if (allAttempts.length === 0) {
-                    console.log('No attempts in Firebase, checking localStorage...');
-                    allAttempts = JSON.parse(localStorage.getItem('testAttempts') || '[]');
-                    console.log('Loaded from localStorage:', allAttempts.length);
-                }
                 
                 if (allTests.length === 0) {
                     console.log('No tests in Firebase, checking localStorage...');
@@ -611,11 +668,17 @@
             contentArea.innerHTML = `
                 <div class="loading">
                     <div class="loading-spinner"></div>
-                    <p>Loading test attempts...</p>
+                    <p>Loading test attempts from Firebase and localStorage...</p>
+                    <p style="font-size: 0.9rem; color: #888; margin-top: 10px;">Fetching latest data...</p>
                 </div>
             `;
             
             const result = await loadAttemptsFromFirebase();
+            
+            // Update last refresh time
+            const now = new Date();
+            document.getElementById('last-refresh').textContent = now.toLocaleTimeString();
+            document.getElementById('last-refresh').title = now.toLocaleString();
             
             if (!result.success && result.attempts.length === 0) {
                 contentArea.innerHTML = `
@@ -627,12 +690,73 @@
                 return;
             }
             
+            // Show notification about data source
+            let dataSource = '';
+            if (result.success && allAttempts.length > 0) {
+                dataSource = '✓ Data loaded successfully from Firebase and localStorage';
+                showNotification(dataSource, 'success');
+            } else if (allAttempts.length > 0) {
+                dataSource = '⚠️ Using localStorage data (Firebase connection issue)';
+                showNotification(dataSource, 'warning');
+            }
+            
             // Populate test filter
             const testFilter = document.getElementById('test-filter');
             testFilter.innerHTML = '<option value="">All Tests</option>' + 
                 allTests.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
             
             displayAttempts(allAttempts);
+        };
+        
+        // Show notification
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 15px 25px;
+                border-radius: 8px;
+                color: white;
+                font-weight: 600;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+                z-index: 10000;
+                animation: slideIn 0.3s ease;
+                max-width: 400px;
+            `;
+            
+            if (type === 'success') {
+                notification.style.background = 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)';
+            } else if (type === 'warning') {
+                notification.style.background = 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)';
+            } else if (type === 'error') {
+                notification.style.background = 'linear-gradient(135deg, #dc3545 0%, #ef4444 100%)';
+            } else {
+                notification.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            }
+            
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+        
+        // Hard refresh - clear cache and reload
+        window.hardRefresh = function() {
+            showNotification('Clearing cache and reloading...', 'info');
+            setTimeout(() => {
+                // Clear browser cache for this page
+                if ('caches' in window) {
+                    caches.keys().then(names => {
+                        names.forEach(name => caches.delete(name));
+                    });
+                }
+                // Force reload from server, bypassing cache
+                window.location.reload(true);
+            }, 500);
         };
         
         // Setup event listeners
